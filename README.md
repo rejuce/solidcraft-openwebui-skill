@@ -6,7 +6,9 @@ LLM / OpenWebUI build 3D floor-plan models and render them to PNG — no GUI
 interaction required.
 
 This skill does **not** start the SolidCraft app. The app must already be
-running and listening on `127.0.0.1:7878` with the renderer set to `cpu`.
+running with the renderer set to `cpu`. The bundled driver auto-discovers the
+app's port and token from the control files, so no port needs to be hard-coded
+(currently `127.0.0.1:27878`; a prior install used `7878`).
 
 ## Why a skill, not a tool
 

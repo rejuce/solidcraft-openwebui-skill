@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SolidCraft MCP JSON-RPC driver (stdio bridge to the running app on :7878).
+"""SolidCraft MCP JSON-RPC driver (stdio bridge to the running app).
 
 Protocol: standard MCP over stdio.
 - Call `initialize` first (no notifications/initialized needed).
@@ -8,28 +8,75 @@ Protocol: standard MCP over stdio.
 - Engine commands (sketch.*, solid.*) are MCP tools that must be run through
   `run()` / `batch()` — they are wrapped as {"command":"execute",...}.
 - Special tools (new_design, save, screenshot, inspect_design, list_tools,
-  list_commands, describe_command) are called directly via `tool()` / `m.tool()`.
+  list_commands, describe_command, batch, execute) are called directly via
+  `tool()` / `m.tool()`.
 
-CRITICAL gotcha: `new_design` causes the app to restart, which drops the MCP
-connection mid-script. Do NOT call it in the middle of a build script. Start a
-fresh MCP session after `new_design` and reconnect.
-
-CRITICAL gotcha: when connected to the running app, the `screenshot` tool
-ignores the `view` parameter and captures the window by default. To get
-distinct views (top/iso/fit), pass an explicit `camera` object with distinct
-yaw/pitch/distance/fov per view, plus `source:"model"` and `grid:true`.
+BOOTSTRAP (IMPORTANT): spawn() auto-discovers the app port and token from the
+control directory (see discover_port / discover_token_path below). It reads
+`current.port` and then `<port>.token`. This means the driver works whether the
+app is on 7878, 27878, or any other port — do NOT hard-code a port in your own
+scripts, and do NOT rewrite the driver. If you must adapt (e.g. a non-standard
+install), copy the driver into your temp dir and patch only what is broken.
 """
 import json
+import os
 import subprocess
 import sys
 import threading
 import time
 
+CONTROL_DIR = os.path.expanduser("~/.local/share/solidcraft/control")
+DEFAULT_CLI = "/home/user/solidcraft-work/solidcraft-0.22.0-linux-x86_64/bin/solidcraft-cli"
+DEFAULT_PORT = 7878
 
-def spawn(token_path="/home/user/.local/share/solidcraft/control/7878.token",
-          host="127.0.0.1", port=7878, cli=None):
+
+def discover_port(default=DEFAULT_PORT):
+    """Return the port the app is actually listening on.
+
+    Reads `current.port` from the control dir. Falls back to `default`
+    (7878) if the file is missing or unreadable.
+    """
+    try:
+        with open(os.path.join(CONTROL_DIR, "current.port")) as f:
+            return int(f.read().strip().split()[0])
+    except Exception:
+        return default
+
+
+def discover_token_path(port):
+    """Path to the token file for a given port: control/<port>.token."""
+    return os.path.join(CONTROL_DIR, f"{port}.token")
+
+
+def discover_cli():
+    """Locate the solidcraft-cli binary.
+
+    Prefers the known install path, then falls back to a PATH search.
+    """
+    if os.path.exists(DEFAULT_CLI):
+        return DEFAULT_CLI
+    for cand in ("solidcraft-cli",):
+        for base in (
+            "/home/user/solidcraft-work",
+            "/home/user/solidcraft-work/solidcraft-0.22.0-linux-x86_64/bin",
+        ):
+            p = os.path.join(base, cand)
+            if os.path.exists(p):
+                return p
+    return DEFAULT_CLI
+
+
+def spawn(token_path=None, host="127.0.0.1", port=None, cli=None):
+    """Launch `solidcraft-cli mcp` as a Popen stdio process.
+
+    Port and token are auto-discovered unless explicitly overridden.
+    """
+    if port is None:
+        port = discover_port()
+    if token_path is None:
+        token_path = discover_token_path(port)
     token = open(token_path).read().strip()
-    cli = cli or "/home/user/solidcraft-work/solidcraft-0.22.0-linux-x86_64/bin/solidcraft-cli"
+    cli = cli or discover_cli()
     proc = subprocess.Popen(
         [cli, "mcp", "--connect", f"{host}:{port}", "--token", token],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -100,15 +147,22 @@ class MCP:
             return json.dumps(r.get("result"))
 
     def tool(self, name, arguments=None):
-        """Call an MCP tool by name (inspect_design, screenshot, new_design, ...)."""
+        """Call an MCP tool by name (inspect_design, screenshot, batch, ...)."""
         r = self.call("tools/call", {"name": name, "arguments": arguments or {}})
         return self.tool_result(r)
 
     def list_tools(self):
+        """Return the LIVE list of MCP tools exposed by the running app.
+
+        This is authoritative for which tools exist (batch, execute,
+        screenshot, inspect_design, ...). Use this to verify a tool exists
+        before calling it — do NOT rely on the engine-command schema dump.
+        """
         r = self.call("tools/list", {})
         return json.loads(self.tool_result(r))["tools"]
 
     def list_commands(self, filter=None):
+        """Return engine-command schemas (sketch.*, solid.*). NOT live tools."""
         params = {}
         if filter:
             params["filter"] = filter
@@ -120,7 +174,10 @@ class MCP:
         return json.loads(r)
 
     def batch(self, cmds):
-        """Run a batch of engine steps. cmds = list of {command, params} wrappers."""
+        """Run a batch of engine steps. cmds = list of {command, params} wrappers.
+
+        Sends the live `batch` MCP tool with {"commands": cmds}.
+        """
         r = self.tool("batch", {"commands": cmds})
         return r
 

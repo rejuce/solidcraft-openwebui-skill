@@ -11,16 +11,18 @@ render them to PNG from the command line — no GUI interaction required.
 
 The MCP server is a stdio process launched by `solidcraft-cli` that bridges to
 the running SolidCraft app. This skill does **not** start the SolidCraft app
-itself — the app must already be running and listening on `127.0.0.1:7878`.
+itself — the app must already be running. It currently listens on
+`127.0.0.1:27878` (a previous run used `7878`; the port can change between
+installs). **Do not hard-code a port** — the bundled driver auto-discovers it
+(see below).
 
 ## Prerequisites
 
-- SolidCraft app running and listening on `127.0.0.1:7878` with renderer set to
-  `cpu` (headless server).
+- SolidCraft app running with renderer set to `cpu` (headless server).
 - `solidcraft-cli` at
   `/home/user/solidcraft-work/solidcraft-0.22.0-linux-x86_64/bin/solidcraft-cli`.
-- Control token at
-  `/home/user/.local/share/solidcraft/control/7878.token`.
+- Control files in `~/.local/share/solidcraft/control/` (`current.port`,
+  `<port>.token`). The driver reads these automatically.
 - Python 3 (standard library only — no external dependencies).
 
 ## The two execution paths (CRITICAL)
@@ -29,13 +31,27 @@ SolidCraft's MCP exposes two kinds of commands. **They must not be confused:**
 
 1. **MCP tools** — called directly via `m.tool(name, arguments)`:
    `inspect_design`, `screenshot`, `new_design`, `save`, `list_tools`,
-   `list_commands`, `describe_command`.
-2. **Engine commands** — `sketch.*` and `solid.*` — which are MCP tools that
-   must be run **through `m.run()` / `m.batch()`** (they are wrapped as
-   `{"command":"execute","params":{"command":<cid>,"params":{...}}}`).
+   `list_commands`, `describe_command`, **`batch`**, **`execute`**.
+2. **Engine commands** — `sketch.*` and `solid.*` — which are NOT in the tool
+   list (they are *schemas* from `list_commands()`). They are run by wrapping
+   them as `{"command":"execute","params":{"command":<cid>,"params":{...}}}` and
+   sending the **live `batch` MCP tool** via `m.run()` / `m.batch()`.
 
 Rule of thumb: if the command starts with `sketch.` or `solid.`, use
 `m.run()` / `m.batch()`. Otherwise use `m.tool()`.
+
+> ⚠️ **Verify tools against the LIVE app, not the schema dump.**
+> `list_commands()` returns engine-command *schemas* (a 245 KB list of
+> `sketch.*`/`solid.*` definitions). That is **not** the list of live MCP
+> tools. To check whether a tool like `batch` or `screenshot` actually exists,
+> call `m.list_tools()` — that returns the authoritative live tool list.
+>
+> > ⚠️ **Do NOT reinvent the driver.** The bundled `mcp_driver.py`
+> > auto-discovers the port and token from the control files, so it works
+> > regardless of whether the app is on 7878 or 27878. If something fails,
+> > **fix the bundled driver** (copy it to your temp dir and patch the one
+> > broken line) — do **not** write your own inline JSON-RPC bridge. Writing a
+> > custom bridge is the #1 cause of failure here.
 
 ## How to run
 

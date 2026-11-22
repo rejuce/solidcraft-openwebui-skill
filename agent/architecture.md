@@ -23,8 +23,8 @@ render_views.py  (orchestration / template)
 mcp_driver.py  (JSON-RPC driver)
         │  subprocess.Popen
         ▼
-solidcraft-cli mcp --connect 127.0.0.1:7878 --token <token>   (stdio bridge)
-        │  bridges to the running SolidCraft app on :7878
+solidcraft-cli mcp --connect 127.0.0.1:<PORT> --token <token>   (stdio bridge)
+        │  bridges to the running SolidCraft app (port auto-discovered)
         ▼
 SolidCraft app  (renderer=cpu)
 ```
