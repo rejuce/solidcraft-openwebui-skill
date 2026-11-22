@@ -1,0 +1,7 @@
+# SolidCraft MCP Skill has no Python dependencies.
+# It uses only the Python 3 standard library (json, subprocess, threading, time).
+#
+# Runtime prerequisites (not pip-installable):
+#   - SolidCraft app running on 127.0.0.1:7878 with renderer=cpu
+#   - solidcraft-cli at /home/user/solidcraft-work/solidcraft-0.22.0-linux-x86_64/bin/solidcraft-cli
+#   - control token at /home/user/.local/share/solidcraft/control/7878.token

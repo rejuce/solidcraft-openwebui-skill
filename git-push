@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Push the SolidCraft MCP Skill repo to its GitHub upstream using the deploy key.
+# Upstream: git@github.com:rejuce/solidcraft-openwebui-skill.git
+#
+# Usage: ./git-push <branch>
+#
+# Prerequisite: the public half of the deploy key (repos/keys/solidcraft-openwebui-skill/solidcraft-openwebui-skill.pub)
+# must be registered as a Write-Enabled deploy key on the GitHub repo, otherwise
+# GitHub returns "Permission denied (publickey)".
+set -euo pipefail
+
+BRANCH="${1:-master}"
+KEY="/workspace/repos/keys/solidcraft-openwebui-skill/solidcraft-openwebui-skill"
+
+if [[ ! -f "$KEY" ]]; then
+  echo "deploy key not found: $KEY" >&2
+  echo "restore it first:" >&2
+  echo "  cp /workspace/repos/keys/solidcraft-openwebui-skill/solidcraft-openwebui-skill ~/.ssh/id_solidcraft_openwebui_skill && chmod 600 ~/.ssh/id_solidcraft_openwebui_skill" >&2
+  exit 1
+fi
+
+GIT_SSH_COMMAND="ssh -i $KEY -o StrictHostKeyChecking=accept-new" git push upstream "$BRANCH"
